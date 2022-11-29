@@ -94,9 +94,10 @@ def main():
       Cam_mat= get_perspective_transform(old_points,new_points)
       image=plt.imread("image/gray-cat.jpg")
       warped=perspective_warping(image,Cam_mat)
-      img, (x0,x1) =plt.subplots(1,2,figsize=(20,40))
+      img, (x0,x1) = plt.subplots(1,2,figsize=(20,40))
       x0.imshow(image)
       x1.imshow(warped)
+
 
 if __name__ == '__main__':
       main()
