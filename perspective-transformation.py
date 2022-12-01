@@ -1,11 +1,11 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import math
 
 class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域）和新定点坐标（新区域），用于作透视变换
 
       def __init__(self, image_path):
+            self.output_st = ""
             old_points = self.select_region_points(image_path,mode=False)    # 选择旧区域的定点
             new_points = self.select_region_points(image_path,mode=True,points=old_points) # 选择新区域的定点
             image = plt.imread(image_path)
@@ -14,7 +14,7 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
             plt.imshow(image,cmap="gray")
             self.old_points = old_points
             self.new_points = new_points
-
+            
     
       def mouse_left_click(self, event, x, y, flag, param):   # 点击鼠标左键
             global left_click_X, left_click_Y 
@@ -36,7 +36,12 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
       def select_region_points(self, path, mode, points=None):   # 选择区域的定点
             image = cv2.imread(path)
             if mode == True:
+                  self.output_st += "New Points:\n"
+                  print("\nNew Points:")
                   self.polydraw(points,image,True, b=0,g=0,r=0)
+            else:
+                  self.output_st += "Old Points:\n"
+                  print("Old Points:")
             cv2.namedWindow('image')
             cv2.setMouseCallback('image', self.mouse_left_click)
             x = [0]   # 存放x坐标的数组
@@ -52,7 +57,7 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
                         else:
                               x.append(left_click_X)
                               y.append(left_click_Y)
-                              
+
                         print (left_click_X, left_click_Y)  
 
                         if len(x)<3:
@@ -68,6 +73,7 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
                   elif k == 13:    # ENTER 键退出滑鼠左键设置
                       break
             points = self.get_point_array(x,y)
+            self.output_st += str(points) + '\n\n'
             cv2.destroyAllWindows()
             return(points)
     
@@ -120,11 +126,42 @@ def get_perspective_transform(src,new_points):
       A_matrix = np.insert(A_matrix, A_matrix.shape[0], values=1.0, axis=0)  # 插入a_33 = 1
       A_matrix = A_matrix.reshape((3, 3))
       return A_matrix
+
+def to_mtx(img):
+      H,V = img.shape
+      mtr = np.zeros((V,H), dtype='int')
+      for i in range(img.shape[0]):
+            mtr[:,i] = img[i]
+      
+      return mtr
+
+def to_img(mtr):
+      V,H = mtr.shape
+      img = np.zeros((H,V), dtype='int')
+      for i in range(mtr.shape[0]):
+            img[:,i] = mtr[i]
+            
+      return img
+
+def warpPerspective(M, dsize, img):
+      mtr = to_mtx(img)
+      R,C = dsize
+      dst = np.zeros((R,C))
+      for i in range(mtr.shape[0]):
+            for j in range(mtr.shape[1]):
+                  res = np.dot(M, [i,j,1])
+                  i2,j2,_ = (res / res[2] + 0.5).astype(int)
+                  if i2 >= 0 and i2 < R:
+                        if j2 >= 0 and j2 < C:
+                              dst[i2,j2] = mtr[i,j]
+      
+      return to_img(dst)
+
     
 def perspective_warping(A_matrix,new_points,image):
       '''shape = image.shape[:2]
       print(shape)
-      new_image = cv2.warpPerspective(image, Camera_matrix, (shape[1],shape[0]), flags= cv2.INTER_LINEAR)
+      new_image = cv2.warpPerspective(image, A_matrix, (shape[1],shape[0]), flags= cv2.INTER_LINEAR)
       return(new_image)'''
 
       '''
@@ -132,6 +169,7 @@ def perspective_warping(A_matrix,new_points,image):
       :param new_points:
       :return:
       '''
+      print('SHAPE',image.shape)
       w = abs(int(new_points[1, 0] - new_points[0, 0])) +1  # 337
       h = abs(int(new_points[2, 1] - new_points[0, 1])) +1  # 488
 
@@ -178,17 +216,18 @@ def perspective_warping(A_matrix,new_points,image):
                   # except Exception as msg:
                   #     print(xy1[0], xy1[1])
 
-                  result[i, j] = image[int(y), int(x)]
+                  #result[i, j] = image[int(y), int(x)]
 
-                  '''result[i, j, 0] = image[int(y), int(x), 0]
+                  result[i, j, 0] = image[int(y), int(x), 0]
                   result[i, j, 1] = image[int(y), int(x), 1]
-                  result[i, j, 2] = image[int(y), int(x), 2]'''
+                  result[i, j, 2] = image[int(y), int(x), 2]
 
 
       return result
 
 
 def main():
+      st = ""
       image = cv2.imread("image/cat.jpg")
       grayimg = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
       cv2.imwrite("image/gray-cat.jpg", grayimg)
@@ -197,13 +236,18 @@ def main():
       new_points = point_setting.new_points
       #Cam_mat1 = get_perspective_transform1(old_points,new_points)
       A_matrix = get_perspective_transform(old_points,new_points)
-      print('A matrix:\n', A_matrix)
-
+      st += 'A Matrix:\n' + str(A_matrix) + '\n\n'
       image = plt.imread("image/gray-cat.jpg")
-      result_image = perspective_warping(A_matrix,new_points,image)
-      print('Warp matrix:\n',result_image)
+      result_image = warpPerspective(A_matrix,(image.shape[:2][1],image.shape[:2][0]),image)
+      st += 'Warp Matrix:\n' + str(result_image) 
+      print(st)
+      point_setting.output_st += st
+      outfile = open('output/result.txt','w')
+      outfile.write(point_setting.output_st)
+      np.savetxt('output/warpMatrix.txt',result_image,fmt='%s')
+
       image, (x0,x1) = plt.subplots(1,2,figsize=(20,40))
-      x0.imshow(image)
+      x0.imshow(grayimg)
       x1.imshow(result_image)
       plt.show()
 
