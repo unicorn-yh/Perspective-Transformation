@@ -26,7 +26,9 @@ a_{23} \\
 a_{31} \\
 a_{32} 
 \end{bmatrix} 
+
 =
+
 \begin{bmatrix}
 X_{0} \\
 Y_{0} \\
