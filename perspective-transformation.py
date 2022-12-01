@@ -15,7 +15,6 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
             self.old_points = old_points
             self.new_points = new_points
             
-    
       def mouse_left_click(self, event, x, y, flag, param):   # 点击鼠标左键
             global left_click_X, left_click_Y 
             if event == cv2.EVENT_LBUTTONDOWN:
@@ -30,15 +29,15 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
                 points[i,1]= y[i]   
             return(points)
     
-      def polydraw(self, points, image,closed, b,g,r):   # 用线连接所有点对
-            cv2.polylines(image, [points], closed,(b,g,r), 2)
+      def drawlines(self, points, image, closed, b,g,r):   # 用线连接所有点对
+            cv2.polylines(image, [points], closed, (b,g,r), 2)
 
       def select_region_points(self, path, mode, points=None):   # 选择区域的定点
             image = cv2.imread(path)
             if mode == True:
                   self.output_st += "New Points:\n"
                   print("\nNew Points:")
-                  self.polydraw(points,image,True, b=0,g=0,r=0)
+                  self.drawlines(points,image,True, b=0,g=0,r=0)
             else:
                   self.output_st += "Old Points:\n"
                   print("Old Points:")
@@ -64,11 +63,11 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
                               pass
                         else:
                               points = self.get_point_array(x,y)
-                              self.polydraw(points,image, False,b=255,g=255,r=255)
+                              self.drawlines(points,image, False,b=255,g=255,r=255)
                               cv2.imshow('image',image)
                               #cv2.waitKey(0)
                         if len(x)==5:
-                              self.polydraw(np.array([(x[1],y[1]),(x[4],y[4])],np.int32),image,False,b=255,g=255,r=255)
+                              self.drawlines(np.array([(x[1],y[1]),(x[4],y[4])],np.int32),image,False,b=255,g=255,r=255)
 
                   elif k == 13:    # ENTER 键退出滑鼠左键设置
                       break
@@ -76,154 +75,67 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
             self.output_st += str(points) + '\n\n'
             cv2.destroyAllWindows()
             return(points)
-    
-      
 
-#Perspective transform and Perspective Warping
-def get_perspective_transform1(old_points,new_points):
-    M = cv2.getPerspectiveTransform(old_points.astype(np.float32),new_points.astype(np.float32))
-    return(M)
-
-def get_perspective_transform(src,new_points):
+def get_perspective_transform(old_points,new_points):   # 透视变换
       '''
-      利用原图需要变换的物体的四个顶点坐标和变换后的四个顶点坐标求出变换矩阵warpMatrix
-      A * A_matrix = B
-      :param src: 原图需要变换物体的四个顶点
+      利用原图需要变换的物体的四个顶点坐标和变换后的四个顶点坐标求出变换矩阵 trans_matrix
+      A * trans_matrix = B
+      :param old_points: 原图需要变换物体的四个顶点
       :param new_points: 新图对应的四个顶点
-      :return: A_matrix
+      :return: trans_matrix
       '''
 
       B = np.zeros((8, 1))
+      A = np.zeros((8, 8))
       for i in range(4):
-            # 先做一个2*8的矩阵
-            A1 = np.zeros((2, 8))
+            k = 2*i
+            A[k,0] = old_points[i,0]
+            A[k,1] = old_points[i,1]
+            A[k,2] = 1
+            A[k,6] = -old_points[i,0] * new_points[i,0]
+            A[k,7] = -old_points[i,1] * new_points[i,0]
+            B[k] = new_points[i,0]
+            A[k+1,3] = old_points[i,0]
+            A[k+1,4] = old_points[i,1]
+            A[k+1,5] = 1
+            A[k+1,6] = -old_points[i,0] * new_points[i,1]
+            A[k+1,7] = -old_points[i,1] * new_points[i,1]
+            B[k+1] = new_points[i,1]
 
-            A1[0, 0] = src[i,0]
-            A1[0, 1] = src[i,1]
-            A1[0, 2] = 1
-            A1[0, 6] = -src[i, 0] * new_points[i, 0]
-            A1[0, 7] = -src[i, 1] * new_points[i, 0]
-            B[2*i] = new_points[i, 0]
-            A1[1, 3] = src[i, 0]
-            A1[1, 4] = src[i, 1]
-            A1[1, 5] = 1
-            A1[1, 6] = -src[i, 0] * new_points[i, 1]
-            A1[1, 7] = -src[i, 1] * new_points[i, 1]
-            B[2*i+1] = new_points[i, 1]
-
-            if i == 0:
-                  A = A1
-            else:
-                  A = np.vstack([A, A1]) # 连接四个2*8的矩阵
-                  pass
-            pass
+      np.savetxt('output/A_matrix.txt',A,fmt='%s')
       A = np.mat(A)
-      # print(A)
-      A_matrix = A.I*B
-      # print(A_matrix)
-      # 已求出a11,a12,a13,a21,a22,a23,a31,a32  再插入a33 = 1
-      A_matrix = np.array(A_matrix).T[0]
-      A_matrix = np.insert(A_matrix, A_matrix.shape[0], values=1.0, axis=0)  # 插入a_33 = 1
-      A_matrix = A_matrix.reshape((3, 3))
-      return A_matrix
+      trans_matrix = A.I*B    # 8×1 矩阵：a11,a12,a13,a21,a22,a23,a31,a32
+      trans_matrix = np.array(trans_matrix).T[0]    
+      trans_matrix = np.insert(trans_matrix, trans_matrix.shape[0], values=1.0, axis=0)  # 插入 a_33 = 1
+      trans_matrix = trans_matrix.reshape((3, 3))
+      return trans_matrix
 
-def to_mtx(img):
-      H,V = img.shape
-      mtr = np.zeros((V,H), dtype='int')
-      for i in range(img.shape[0]):
-            mtr[:,i] = img[i]
-      
-      return mtr
+def convertMatrix(image):
+      H,V = image.shape
+      matrix = np.zeros((V,H), dtype='int')
+      for i in range(image.shape[0]):
+            matrix[:,i] = image[i]
+      return matrix
 
-def to_img(mtr):
-      V,H = mtr.shape
-      img = np.zeros((H,V), dtype='int')
-      for i in range(mtr.shape[0]):
-            img[:,i] = mtr[i]
-            
-      return img
+def convertImage(matrix):
+      V,H = matrix.shape
+      image = np.zeros((H,V), dtype='int')
+      for i in range(matrix.shape[0]):
+            image[:,i] = matrix[i]
+      return image
 
-def warpPerspective(M, dsize, img):
-      mtr = to_mtx(img)
+def warpPerspective(trans_matrix, dsize, image):   # 透视扭曲
+      matrix = convertMatrix(image)
       R,C = dsize
       dst = np.zeros((R,C))
-      for i in range(mtr.shape[0]):
-            for j in range(mtr.shape[1]):
-                  res = np.dot(M, [i,j,1])
+      for i in range(matrix.shape[0]):
+            for j in range(matrix.shape[1]):
+                  res = np.dot(trans_matrix, [i,j,1])
                   i2,j2,_ = (res / res[2] + 0.5).astype(int)
                   if i2 >= 0 and i2 < R:
                         if j2 >= 0 and j2 < C:
-                              dst[i2,j2] = mtr[i,j]
-      
-      return to_img(dst)
-
-    
-def perspective_warping(A_matrix,new_points,image):
-      '''shape = image.shape[:2]
-      print(shape)
-      new_image = cv2.warpPerspective(image, A_matrix, (shape[1],shape[0]), flags= cv2.INTER_LINEAR)
-      return(new_image)'''
-
-      '''
-      :param A_matrix:
-      :param new_points:
-      :return:
-      '''
-      print('SHAPE',image.shape)
-      w = abs(int(new_points[1, 0] - new_points[0, 0])) +1  # 337
-      h = abs(int(new_points[2, 1] - new_points[0, 1])) +1  # 488
-
-      # 用opencv处理图像时，可以发现获得的矩阵类型都是uint8 无符8位整型（0-255）, uint8是专门用于存储各种图像的（包括RGB，灰度图像等），范围是从0–255
-      result = np.zeros((h, w, 3), np.uint8)
-
-      # 数组与数组运算，矩阵与矩阵运算，最好统一数据类型，实测数组与矩阵相乘结果会不一样
-      # W = np.linalg.inv(A_matrix)
-      W = np.mat(A_matrix)
-      W = W.I
-      for i in range(h):
-            for j in range(w):
-
-                  XY1 = np.array([[j], [i], [1]])
-                  # 关于j,i 的位置问题，由给定的dst坐标排列决定，由src和dst算出的变换矩阵已经定好位置，所以在反求原图位置的时候需注意
-                  XY1 = np.mat(XY1)
-                  # XY1 = XY1.T    一维数组无法进行转置
-                  # print(XY1)
-                  x, y, _ = W.dot(XY1)
-
-                  # 验证算出来的坐标是否和src里的相对应
-                  if i == h-1 and j == 0:
-                        #print(x, y)
-                        print('==')
-
-                  # 算出的索引超出原图大小时，令其等于边界
-                  if y >=960:
-                        y = 959
-                        pass
-                  if y < 0:
-                        y = 0
-                        pass
-                  if x >=540:
-                        x = 539
-                        pass
-                  if x < 0:
-                        x = 0
-                        pass
-                  # print(int(xy1[0]))
-                  # try:
-                  #     result[i, j, 0] = image[int(xy1[0]), int(xy1[1]), 0]
-                  #     result[i, j, 1] = image[int(xy1[0]), int(xy1[1]), 1]
-                  #     result[i, j, 2] = image[int(xy1[0]), int(xy1[1]), 2]
-                  # except Exception as msg:
-                  #     print(xy1[0], xy1[1])
-
-                  #result[i, j] = image[int(y), int(x)]
-
-                  result[i, j, 0] = image[int(y), int(x), 0]
-                  result[i, j, 1] = image[int(y), int(x), 1]
-                  result[i, j, 2] = image[int(y), int(x), 2]
-
-
-      return result
+                              dst[i2,j2] = matrix[i,j]
+      return convertImage(dst)
 
 
 def main():
@@ -234,11 +146,10 @@ def main():
       point_setting = set_oldpoints_newpoints("image/gray-cat.jpg")
       old_points = point_setting.old_points
       new_points = point_setting.new_points
-      #Cam_mat1 = get_perspective_transform1(old_points,new_points)
-      A_matrix = get_perspective_transform(old_points,new_points)
-      st += 'A Matrix:\n' + str(A_matrix) + '\n\n'
+      trans_matrix = get_perspective_transform(old_points,new_points)
+      st += 'A Matrix:\n' + str(trans_matrix) + '\n\n'
       image = plt.imread("image/gray-cat.jpg")
-      result_image = warpPerspective(A_matrix,(image.shape[:2][1],image.shape[:2][0]),image)
+      result_image = warpPerspective(trans_matrix,(image.shape[:2][1],image.shape[:2][0]),image)
       st += 'Warp Matrix:\n' + str(result_image) 
       print(st)
       point_setting.output_st += st
