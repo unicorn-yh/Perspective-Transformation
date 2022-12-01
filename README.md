@@ -26,7 +26,9 @@ a_{16} \\
 a_{17} \\
 a_{18} 
 \end{bmatrix} 
+
 =
+
 \begin{bmatrix}
 X_{0} \\
 Y_{0} \\
