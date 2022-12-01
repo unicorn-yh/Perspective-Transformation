@@ -9,8 +9,8 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
             old_points = self.select_region_points(image_path,mode=False)    # 选择旧区域的定点
             new_points = self.select_region_points(image_path,mode=True,points=old_points) # 选择新区域的定点
             image = plt.imread(image_path)
-            cv2.polylines(image, np.int32([old_points]),True,(0,0,0),2)        # 旧区域-黑线条
-            cv2.polylines(image, np.int32([new_points]),True,(255,255,255),2)  # 新区域-白线条
+            cv2.polylines(image,np.int32([old_points]),True,(0,0,0),2)        # 旧区域-黑线条
+            cv2.polylines(image,np.int32([new_points]),True,(255,255,255),2)  # 新区域-白线条
             plt.imshow(image,cmap="gray")
             self.old_points = old_points
             self.new_points = new_points
@@ -25,7 +25,7 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
             y = y[1:]          
             points = np.empty((len(x),2), np.int32)    # 记录点的坐标
             for i in range(len(x)):   
-                points[i,0]= x[i]     # points[0,0] = x[0], points[0,1] = y[0]
+                points[i,0]= x[i]    
                 points[i,1]= y[i]   
             return(points)
     
@@ -41,12 +41,12 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
             else:
                   self.output_st += "Old Points:\n"
                   print("Old Points:")
-            cv2.namedWindow('image')
-            cv2.setMouseCallback('image', self.mouse_left_click)
+            cv2.namedWindow('Perspective Transformation')
+            cv2.setMouseCallback('Perspective Transformation', self.mouse_left_click)
             x = [0]   # 存放x坐标的数组
             y = [0]   # 存放y坐标的数组
         
-            cv2.imshow('image',image)
+            cv2.imshow('Perspective Transformation',image)
             while(1):
                   k = cv2.waitKey(1) & 0xFF
                   if k == ord('1'):
@@ -56,7 +56,6 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
                         else:
                               x.append(left_click_X)
                               y.append(left_click_Y)
-
                         print (left_click_X, left_click_Y)  
 
                         if len(x)<3:
@@ -64,8 +63,7 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
                         else:
                               points = self.get_point_array(x,y)
                               self.drawlines(points,image, False,b=255,g=255,r=255)
-                              cv2.imshow('image',image)
-                              #cv2.waitKey(0)
+                              cv2.imshow('Perspective Transformation',image)
                         if len(x)==5:
                               self.drawlines(np.array([(x[1],y[1]),(x[4],y[4])],np.int32),image,False,b=255,g=255,r=255)
 
@@ -76,15 +74,14 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
             cv2.destroyAllWindows()
             return(points)
 
-def get_perspective_transform(old_points,new_points):   # 透视变换
+def perspectiveTransform(old_points,new_points):   # 透视变换
       '''
-      利用原图需要变换的物体的四个顶点坐标和变换后的四个顶点坐标求出变换矩阵 trans_matrix
-      A * trans_matrix = B
+      利用原图需要变换的物体的四个顶点坐标和变换后的四个顶点坐标求出变换矩阵 warp_matrix
+       A * warp_matrix = B
       :param old_points: 原图需要变换物体的四个顶点
       :param new_points: 新图对应的四个顶点
-      :return: trans_matrix
+      :return: warp_matrix
       '''
-
       B = np.zeros((8, 1))
       A = np.zeros((8, 8))
       for i in range(4):
@@ -104,53 +101,52 @@ def get_perspective_transform(old_points,new_points):   # 透视变换
 
       np.savetxt('output/A_matrix.txt',A,fmt='%s')
       A = np.mat(A)
-      trans_matrix = A.I*B    # 8×1 矩阵：a11,a12,a13,a21,a22,a23,a31,a32
-      trans_matrix = np.array(trans_matrix).T[0]    
-      trans_matrix = np.insert(trans_matrix, trans_matrix.shape[0], values=1.0, axis=0)  # 插入 a_33 = 1
-      trans_matrix = trans_matrix.reshape((3, 3))
-      return trans_matrix
+      warp_matrix = A.I*B    # 8×1 矩阵：a11,a12,a13,a21,a22,a23,a31,a32
+      warp_matrix = np.array(warp_matrix).T[0]    
+      warp_matrix = np.insert(warp_matrix, warp_matrix.shape[0], values=1.0, axis=0)  # 插入 a_33 = 1
+      warp_matrix = warp_matrix.reshape((3, 3))
+      return warp_matrix
 
-def convertMatrix(image):
-      H,V = image.shape
-      matrix = np.zeros((V,H), dtype='int')
+def warpPerspective(warp_matrix, image):   # 透视扭曲
+      
+      # 将图像转换为矩阵
+      h,w = image.shape
+      matrix = np.zeros((w,h), dtype='int')
       for i in range(image.shape[0]):
             matrix[:,i] = image[i]
-      return matrix
 
-def convertImage(matrix):
-      V,H = matrix.shape
-      image = np.zeros((H,V), dtype='int')
-      for i in range(matrix.shape[0]):
-            image[:,i] = matrix[i]
-      return image
-
-def warpPerspective(trans_matrix, dsize, image):   # 透视扭曲
-      matrix = convertMatrix(image)
-      R,C = dsize
-      dst = np.zeros((R,C))
+      w,h = (image.shape[:2][1],image.shape[:2][0])
+      final_matrix = np.zeros((w,h))
       for i in range(matrix.shape[0]):
             for j in range(matrix.shape[1]):
-                  res = np.dot(trans_matrix, [i,j,1])
-                  i2,j2,_ = (res / res[2] + 0.5).astype(int)
-                  if i2 >= 0 and i2 < R:
-                        if j2 >= 0 and j2 < C:
-                              dst[i2,j2] = matrix[i,j]
-      return convertImage(dst)
+                  res = np.dot(warp_matrix, [i,j,1])    # 变换矩阵*[x,y,1]=[X,Y,1]
+                  i2, j2, _ = (res / res[2] + 0.5).astype(int)
+                  if i2 >= 0 and i2 < w:
+                        if j2 >= 0 and j2 < h:
+                              final_matrix[i2,j2] = matrix[i,j]
+
+      # 将矩阵转换为图像
+      w,h = final_matrix.shape
+      image = np.zeros((h,w), dtype='int')
+      for i in range(final_matrix.shape[0]):
+            image[:,i] = final_matrix[i]
+
+      return image
 
 
 def main():
-      st = ""
       image = cv2.imread("image/cat.jpg")
       grayimg = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
       cv2.imwrite("image/gray-cat.jpg", grayimg)
       point_setting = set_oldpoints_newpoints("image/gray-cat.jpg")
       old_points = point_setting.old_points
       new_points = point_setting.new_points
-      trans_matrix = get_perspective_transform(old_points,new_points)
-      st += 'A Matrix:\n' + str(trans_matrix) + '\n\n'
+      warp_matrix = perspectiveTransform(old_points,new_points)
       image = plt.imread("image/gray-cat.jpg")
-      result_image = warpPerspective(trans_matrix,(image.shape[:2][1],image.shape[:2][0]),image)
-      st += 'Warp Matrix:\n' + str(result_image) 
+      result_image = warpPerspective(warp_matrix,image)
+
+      # 输出矩阵
+      st = '\nWarp Matrix:\n' + str(warp_matrix) + '\n\nResult Image:\n'  + str(result_image) 
       print(st)
       point_setting.output_st += st
       outfile = open('output/result.txt','w')
