@@ -2,6 +2,12 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
+'''
+新旧区域各提取4个定点坐标。
+每用鼠标点击一次图像中的坐标则按一次ENTER键将该坐标提取出来。
+旧区域由黑线条包围；新区域由白线条包围。
+'''
+
 class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域）和新定点坐标（新区域），用于作透视变换
 
       def __init__(self, image_path):
@@ -49,14 +55,14 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
             cv2.imshow('Perspective Transformation',image)
             while(1):
                   k = cv2.waitKey(1) & 0xFF
-                  if k == ord('1'):
+                  if k == 13:      # ENTER 键来提取坐标
                         if x[len(x)-1] == left_click_X and y[len(y)-1] == left_click_Y:
                               x = x
                               y = y                     
                         else:
                               x.append(left_click_X)
                               y.append(left_click_Y)
-                        print (left_click_X, left_click_Y)  
+                              print (left_click_X, left_click_Y)  
 
                         if len(x)<3:
                               pass
@@ -66,13 +72,13 @@ class set_oldpoints_newpoints():    # 提取图像的旧定点坐标（旧区域
                               cv2.imshow('Perspective Transformation',image)
                         if len(x)==5:
                               self.drawlines(np.array([(x[1],y[1]),(x[4],y[4])],np.int32),image,False,b=255,g=255,r=255)
+                              break
 
-                  elif k == 13:    # ENTER 键退出滑鼠左键设置
-                      break
             points = self.get_point_array(x,y)
             self.output_st += str(points) + '\n\n'
             cv2.destroyAllWindows()
             return(points)
+
 
 def perspectiveTransform(old_points,new_points):   # 透视变换
       '''
@@ -107,31 +113,33 @@ def perspectiveTransform(old_points,new_points):   # 透视变换
       warp_matrix = warp_matrix.reshape((3, 3))
       return warp_matrix
 
-def warpPerspective(warp_matrix, image):   # 透视扭曲
+
+def warpPerspective(warp_matrix, input_image):   # 透视扭曲
       
       # 将图像转换为矩阵
-      h,w = image.shape
-      matrix = np.zeros((w,h), dtype='int')
-      for i in range(image.shape[0]):
-            matrix[:,i] = image[i]
+      h,w = input_image.shape
+      input_matrix = np.zeros((w,h), dtype='int')
+      for i in range(input_image.shape[0]):
+            input_matrix[:,i] = input_image[i]
 
-      w,h = (image.shape[:2][1],image.shape[:2][0])
-      final_matrix = np.zeros((w,h))
-      for i in range(matrix.shape[0]):
-            for j in range(matrix.shape[1]):
-                  res = np.dot(warp_matrix, [i,j,1])    # 变换矩阵*[x,y,1]=[X,Y,1]
-                  i2, j2, _ = (res / res[2] + 0.5).astype(int)
-                  if i2 >= 0 and i2 < w:
-                        if j2 >= 0 and j2 < h:
-                              final_matrix[i2,j2] = matrix[i,j]
+      w,h = (input_image.shape[:2][1],input_image.shape[:2][0])
+      output_matrix = np.zeros((w,h))
+      for i in range(input_matrix.shape[0]):
+            for j in range(input_matrix.shape[1]):
+                  mul1, mul2, mul3 = np.dot(warp_matrix, [i,j,1])    # 变换矩阵*[x,y,1]=[X,Y,1]
+                  i_temp = (mul1/mul3 + 0.5).astype(int)
+                  j_temp = (mul2/mul3 + 0.5).astype(int)
+                  if i_temp >= 0 and i_temp < w:
+                        if j_temp >= 0 and j_temp < h:
+                              output_matrix[i_temp,j_temp] = input_matrix[i,j]
 
       # 将矩阵转换为图像
-      w,h = final_matrix.shape
-      image = np.zeros((h,w), dtype='int')
-      for i in range(final_matrix.shape[0]):
-            image[:,i] = final_matrix[i]
+      w,h = output_matrix.shape
+      output_image = np.zeros((h,w), dtype='int')
+      for i in range(output_matrix.shape[0]):
+            output_image[:,i] = output_matrix[i]
 
-      return image
+      return output_image
 
 
 def main():
@@ -151,7 +159,7 @@ def main():
       point_setting.output_st += st
       outfile = open('output/result.txt','w')
       outfile.write(point_setting.output_st)
-      np.savetxt('output/warpMatrix.txt',result_image,fmt='%s')
+      np.savetxt('output/resultImage.txt',result_image,fmt='%s')
 
       image, (x0,x1) = plt.subplots(1,2,figsize=(20,40))
       x0.imshow(grayimg)
