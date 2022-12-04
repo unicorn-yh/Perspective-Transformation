@@ -146,6 +146,7 @@ def main():
       image = cv2.imread("image/cat.jpg")
       grayimg = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
       cv2.imwrite("image/gray-cat.jpg", grayimg)
+      
       point_setting = set_oldpoints_newpoints("image/gray-cat.jpg")
       old_points = point_setting.old_points
       new_points = point_setting.new_points
